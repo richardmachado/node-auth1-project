@@ -1,57 +1,53 @@
-const express = require("express")
-const helmet = require("helmet")
-const cors = require("cors")
-const morgan = require("morgan")
-const authRouter = require("./auth/auth-router.js")
-const usersRouter = require("./users/users-router.js")
+const express = require('express');
 const session = require('express-session');
-const KnexStore = require('connect-session-knex')(session);
-const knex = require('./database/db-config')
+const KnexStore = require('connect-session-knex')(session)
 
+const middleware = require('./api/mware')
 
-const server = express()
+const apiRouter = require('./api/apiRouter');
 
-const sessionConfig= {
-  name:'monsterandvodka',
-  secret:"keep it weird",
-  resave: false,
-  saveUninitialized: true,
-  cookie: {
-    maxAge:1000 * 60* 10,
-    secure: false, // true in production
-    httpOnly: true, // true means JS can't touch the cookie
-  },
-  store: new KnexStore({
-    knex,
-    tablename: "sessions",
-    createtable: true,
-    sidfieldname: "sid", //can be named anything
-    clearInterval: 1000 * 60 * 15,  
-  }),
-};
+const knex = require('./data/dbconfig')
 
-server.use(helmet())
-server.use(cors());
-server.use(morgan('dev'));
-server.use(express.json());
-server.use(session(sessionConfig)); // turn on the session middleware
-// at this point there is a req.session object created by express-session
+const server = express();
 
-
-server.use("/api/auth", authRouter)
-server.use("/users", usersRouter)
-
-server.get("/", (req, res, next) => {
-  res.json({
-    message: "Node I Auth and Cookies Project",
+server.use(
+  session({
+    name: process.env.SESSION_NAME ||'LoginApp',
+    secret: process.env.SESSION_SECRET || '$2y$08$4RFEtq2KMkGFMD.BFpj17uHr9Tmb1Jl5eYLURaUQHfqWyhlvbCcSi',
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      maxAge: 1000 * 60 * 30,
+      secure: false,
+      httpOnly: true,
+    },
+    store: new KnexStore({
+      knex,
+      tablename: "sessionStore",
+      createTable: true,
+      sidfieldname: "sid",
+      clearInterval: 1000 * 60 * 45,
+    }),
   })
+);
+middleware(server)
+
+server.use ('/api', apiRouter)
+
+server.get('/logout', (req, res) => {
+  if(req.session) {
+    req.session.destroy(err => {
+      if(err){
+        res.status(500).json({message: 'There was an error logging you out.'})
+      } else{
+        res.status(200).json({message: 'See you next time!'})
+      }
+    });
+  } else {
+    res.status(200).json({message: 'You were never here'})
+  }
 })
 
-server.use((err, req, res, next) => {
-  console.log('Error:', err)
-  res.status(500).json({
-    message: 'Something went wrong...'
-  })
-});
+
 
 module.exports = server
